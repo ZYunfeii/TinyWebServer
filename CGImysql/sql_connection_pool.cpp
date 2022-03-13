@@ -42,6 +42,7 @@ void connection_pool::init(string url, string User, string PassWord, string DBNa
 			LOG_ERROR("MySQL Error");
 			exit(1);
 		}
+		// 一般来说数据库和server都运行在localhost下，因此默认这里是连接本地数据库
 		con = mysql_real_connect(con, url.c_str(), User.c_str(), PassWord.c_str(), DBName.c_str(), Port, NULL, 0);
 
 		if (con == NULL)
@@ -67,15 +68,15 @@ MYSQL *connection_pool::GetConnection()
 	if (0 == connList.size())
 		return NULL;
 
-	reserve.wait();
+	reserve.wait(); // 如果reserve不是0，执行减一操作，否则等待，直到reserve不为0
 	
 	lock.lock();
 
 	con = connList.front();
 	connList.pop_front();
 
-	--m_FreeConn;
-	++m_CurConn;
+	--m_FreeConn; // 当前空闲的连接数减一
+	++m_CurConn;  // 当前忙碌的连接数加一
 
 	lock.unlock();
 	return con;

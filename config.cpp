@@ -32,6 +32,7 @@ Config::Config(){
     actor_model = 0;
 }
 
+// 自动解析命令行选项参数，不用自己写argv处理函数了
 void Config::parse_arg(int argc, char*argv[]){
     int opt;
     const char *str = "p:l:m:o:s:t:c:a:";

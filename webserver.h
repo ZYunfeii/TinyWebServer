@@ -29,8 +29,8 @@ public:
               int log_write , int opt_linger, int trigmode, int sql_num,
               int thread_num, int close_log, int actor_model);
 
-    void thread_pool();
-    void sql_pool();
+    void thread_pool(); // 线程池
+    void sql_pool();    // 数据库池
     void log_write();
     void trig_mode();
     void eventListen();

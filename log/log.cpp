@@ -43,7 +43,7 @@ bool Log::init(const char *file_name, int close_log, int log_buf_size, int split
     struct tm my_tm = *sys_tm;
 
  
-    const char *p = strrchr(file_name, '/');
+    const char *p = strrchr(file_name, '/'); // 在参数 str 所指向的字符串中搜索最后一次出现字符 c（一个无符号字符）的位置。
     char log_full_name[256] = {0};
 
     if (p == NULL)
@@ -100,7 +100,7 @@ void Log::write_log(int level, const char *format, ...)
 
     if (m_today != my_tm.tm_mday || m_count % m_split_lines == 0) //everyday log
     {
-        
+        // 服务器可能一直运行很多天，当进入新的一天时要重新创建日志，或者当前日志超过最大行数也需要重新创建
         char new_log[256] = {0};
         fflush(m_fp);
         fclose(m_fp);
