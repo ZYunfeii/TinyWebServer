@@ -1,0 +1,80 @@
+2022-03-14 06:11:44.185703 [info]: timer tick
+2022-03-14 06:11:49.186792 [info]: timer tick
+2022-03-14 06:11:54.187744 [info]: timer tick
+2022-03-14 06:11:59.188971 [info]: timer tick
+2022-03-14 06:12:04.189653 [info]: timer tick
+2022-03-14 06:12:09.190289 [info]: timer tick
+2022-03-14 06:12:14.190705 [info]: timer tick
+2022-03-14 06:12:19.191425 [info]: timer tick
+2022-03-14 06:12:24.192471 [info]: timer tick
+2022-03-14 06:12:29.192942 [info]: timer tick
+2022-03-14 06:12:34.193961 [info]: timer tick
+2022-03-14 06:12:39.194968 [info]: timer tick
+2022-03-14 06:12:44.196371 [info]: timer tick
+2022-03-14 06:12:49.197031 [info]: timer tick
+2022-03-14 06:12:54.198106 [info]: timer tick
+2022-03-14 06:12:59.198706 [info]: timer tick
+2022-03-14 06:13:04.198963 [info]: timer tick
+2022-03-14 06:13:09.199865 [info]: timer tick
+2022-03-14 06:15:40.659100 [info]: deal with the client(10.132.57.213)
+2022-03-14 06:15:40.659200 [info]: adjust timer once
+2022-03-14 06:15:40.659270 [info]: GET / HTTP/1.1
+2022-03-14 06:15:40.659331 [info]: Host: 10.132.58.50:9006
+2022-03-14 06:15:40.659344 [info]: Connection: keep-alive
+2022-03-14 06:15:40.659354 [info]: Upgrade-Insecure-Requests: 1
+2022-03-14 06:15:40.659363 [info]: oop!unknow header: Upgrade-Insecure-Requests: 1
+2022-03-14 06:15:40.659374 [info]: User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36
+2022-03-14 06:15:40.659384 [info]: oop!unknow header: User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36
+2022-03-14 06:15:40.659394 [info]: Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9
+2022-03-14 06:15:40.659403 [info]: oop!unknow header: Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9
+2022-03-14 06:15:40.659412 [info]: Accept-Encoding: gzip, deflate
+2022-03-14 06:15:40.659421 [info]: oop!unknow header: Accept-Encoding: gzip, deflate
+2022-03-14 06:15:40.659430 [info]: Accept-Language: zh-CN,zh;q=0.9
+2022-03-14 06:15:40.659439 [info]: oop!unknow header: Accept-Language: zh-CN,zh;q=0.9
+2022-03-14 06:15:40.659572 [info]: 
+2022-03-14 06:15:40.659484 [info]: timer tick
+2022-03-14 06:15:40.659669 [info]: request:HTTP/1.1 200 OK
+
+2022-03-14 06:15:40.659685 [info]: request:HTTP/1.1 200 OK
+Content-Length:586
+
+2022-03-14 06:15:40.659695 [info]: request:HTTP/1.1 200 OK
+Content-Length:586
+Connection:keep-alive
+
+2022-03-14 06:15:40.659706 [info]: request:HTTP/1.1 200 OK
+Content-Length:586
+Connection:keep-alive
+
+
+2022-03-14 06:15:40.659953 [info]: send data to the client(10.132.57.213)
+2022-03-14 06:15:40.660013 [info]: adjust timer once
+2022-03-14 06:15:45.660604 [info]: timer tick
+2022-03-14 06:15:50.660913 [info]: timer tick
+2022-03-14 06:15:55.661870 [info]: timer tick
+2022-03-14 06:16:00.662647 [info]: timer tick
+2022-03-14 06:16:05.663016 [info]: timer tick
+2022-03-14 06:16:10.664116 [info]: timer tick
+2022-03-14 06:16:15.664620 [info]: timer tick
+2022-03-14 06:16:20.665794 [info]: timer tick
+2022-03-14 06:16:25.668386 [info]: timer tick
+2022-03-14 06:16:30.669512 [info]: timer tick
+2022-03-14 06:16:35.670026 [info]: timer tick
+2022-03-14 06:16:40.671198 [info]: timer tick
+2022-03-14 06:16:45.671552 [info]: timer tick
+2022-03-14 06:16:50.672432 [info]: timer tick
+2022-03-14 06:16:55.673524 [info]: timer tick
+2022-03-14 06:17:00.674383 [info]: timer tick
+2022-03-14 06:17:05.674815 [info]: timer tick
+2022-03-14 06:17:10.675213 [info]: timer tick
+2022-03-14 06:17:15.676456 [info]: timer tick
+2022-03-14 06:17:20.676876 [info]: timer tick
+2022-03-14 06:17:25.677279 [info]: timer tick
+2022-03-14 06:17:30.677954 [info]: timer tick
+2022-03-14 06:17:35.678937 [info]: timer tick
+2022-03-14 06:17:40.679522 [info]: timer tick
+2022-03-14 06:17:45.680105 [info]: timer tick
+2022-03-14 06:17:50.681475 [info]: timer tick
+2022-03-14 06:17:55.682354 [info]: timer tick
+2022-03-14 06:18:00.683006 [info]: timer tick
+2022-03-14 06:18:05.683800 [info]: timer tick

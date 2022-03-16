@@ -80,7 +80,9 @@ void removefd(int epollfd, int fd)
     close(fd);
 }
 
-//将事件重置为EPOLLONESHOT
+// 将事件重置为EPOLLONESHOT
+// 对于注册了EPOLLONESHOT事件的文件描述符，操作系统最多触发其上注册的一个可读、可写或者异常事件，且只触发一次
+// EPOLLRDHUP是从Linux内核2.6.17开始由GNU引入的事件。 当socket接收到对方关闭连接时的请求之后触发，有可能是TCP连接被对方关闭，也有可能是对方关闭了写操作。
 void modfd(int epollfd, int fd, int ev, int TRIGMode)
 {
     epoll_event event;
@@ -91,7 +93,7 @@ void modfd(int epollfd, int fd, int ev, int TRIGMode)
     else
         event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
 
-    epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
+    epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event); // 修改epollfd上的注册事件
 }
 
 int http_conn::m_user_count = 0;
@@ -116,7 +118,7 @@ void http_conn::init(int sockfd, const sockaddr_in &addr, char *root, int TRIGMo
     m_sockfd = sockfd;
     m_address = addr;
 
-    addfd(m_epollfd, sockfd, true, m_TRIGMode);
+    addfd(m_epollfd, sockfd, true, m_TRIGMode); // 把和client的tcp套接字加入epollfd
     m_user_count++;
 
     //当浏览器出现连接重置时，可能是网站根目录出错或http响应格式出错或者访问的文件中内容完全为空
@@ -163,6 +165,7 @@ void http_conn::init()
 //返回值为行的读取状态，有LINE_OK,LINE_BAD,LINE_OPEN
 http_conn::LINE_STATUS http_conn::parse_line()
 {
+    // 把\r \n换成\0后返回LINE_OK
     char temp;
     for (; m_checked_idx < m_read_idx; ++m_checked_idx)
     {
@@ -195,7 +198,7 @@ http_conn::LINE_STATUS http_conn::parse_line()
 
 //循环读取客户数据，直到无数据可读或对方关闭连接
 //非阻塞ET工作模式下，需要一次性将数据读完
-bool http_conn::read_once()
+bool http_conn::read_once()  // 线程池将自动调用它读取消息
 {
     if (m_read_idx >= READ_BUFFER_SIZE)
     {
@@ -239,30 +242,36 @@ bool http_conn::read_once()
 }
 
 //解析http请求行，获得请求方法，目标url及http版本号
+// 为方便理解，给出一个HTTP请求报文案例：
+// GET /somedir/page.html HTTP/1.1
+// Host:www.someschool.edu
+// Connection:Close
+// User-agent:Mozilla/5.0
+// Accept-language:fr
 http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 {
-    m_url = strpbrk(text, " \t");
+    m_url = strpbrk(text, " \t"); // 返回的是制表符位置的指针
     if (!m_url)
     {
         return BAD_REQUEST;
     }
-    *m_url++ = '\0';
+    *m_url++ = '\0'; // 把制表符换成\0后加1
     char *method = text;
     if (strcasecmp(method, "GET") == 0)
-        m_method = GET;
+        m_method = GET; // 浏览器输入网址后是GET
     else if (strcasecmp(method, "POST") == 0)
     {
         m_method = POST;
-        cgi = 1;
+        cgi = 1; // POST就要调用cgi了
     }
     else
         return BAD_REQUEST;
-    m_url += strspn(m_url, " \t");
+    m_url += strspn(m_url, " \t"); // 检索字符串 str1 中第一个不在字符串 str2 中出现的字符下标 （这句话相当于没有加）
     m_version = strpbrk(m_url, " \t");
     if (!m_version)
         return BAD_REQUEST;
     *m_version++ = '\0';
-    m_version += strspn(m_version, " \t");
+    m_version += strspn(m_version, " \t"); //（这句话相当于没有加）
     if (strcasecmp(m_version, "HTTP/1.1") != 0)
         return BAD_REQUEST;
     if (strncasecmp(m_url, "http://", 7) == 0)
@@ -282,26 +291,33 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
     //当url为/时，显示判断界面
     if (strlen(m_url) == 1)
         strcat(m_url, "judge.html");
-    m_check_state = CHECK_STATE_HEADER;
+    m_check_state = CHECK_STATE_HEADER; // 下一步将进行switch中的CHECK_STATE_HEADER
     return NO_REQUEST;
 }
 
 //解析http请求的一个头部信息
+// 为方便理解，给出一个HTTP请求报文案例：
+// GET /somedir/page.html HTTP/1.1
+// Host:www.someschool.edu
+// Connection:Close
+// User-agent:Mozilla/5.0
+// Accept-language:fr
 http_conn::HTTP_CODE http_conn::parse_headers(char *text)
 {
+    // 这个函数是循环被执行的（因为首部行有多个，当所有行信息都读入后text[0] == '\0'）
     if (text[0] == '\0')
     {
         if (m_content_length != 0)
         {
-            m_check_state = CHECK_STATE_CONTENT;
+            m_check_state = CHECK_STATE_CONTENT; 
             return NO_REQUEST;
         }
-        return GET_REQUEST;
+        return GET_REQUEST; // m_content_length == 0 说明这是一个请求HTTP报文
     }
     else if (strncasecmp(text, "Connection:", 11) == 0)
     {
         text += 11;
-        text += strspn(text, " \t");
+        text += strspn(text, " \t"); // 该函数返回 str1 中第一个不在字符串 str2 中出现的字符下标
         if (strcasecmp(text, "keep-alive") == 0)
         {
             m_linger = true;
@@ -347,18 +363,20 @@ http_conn::HTTP_CODE http_conn::process_read()
 
     while ((m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || ((line_status = parse_line()) == LINE_OK))
     {
-        text = get_line();
+        text = get_line(); // 获取缓存中的消息（已经通过parse_line处理好一行的内容了也就是末尾为\0可以直接通过char*接收这一行内容）
         m_start_line = m_checked_idx;
         LOG_INFO("%s", text);
         switch (m_check_state)
         {
-        case CHECK_STATE_REQUESTLINE:
+        // 第一次进走CHECK_STATE_REQUESTLINE，解析HTTP报文的请求行
+        case CHECK_STATE_REQUESTLINE: 
         {
             ret = parse_request_line(text);
             if (ret == BAD_REQUEST)
                 return BAD_REQUEST;
             break;
         }
+        // 在parse_request_line中m_check_state改为CHECK_STATE_HEADER
         case CHECK_STATE_HEADER:
         {
             ret = parse_headers(text);
@@ -366,7 +384,7 @@ http_conn::HTTP_CODE http_conn::process_read()
                 return BAD_REQUEST;
             else if (ret == GET_REQUEST)
             {
-                return do_request();
+                return do_request(); // 正常第一次第三步进这个
             }
             break;
         }
@@ -401,7 +419,7 @@ http_conn::HTTP_CODE http_conn::do_request()
 
         char *m_url_real = (char *)malloc(sizeof(char) * 200);
         strcpy(m_url_real, "/");
-        strcat(m_url_real, m_url + 2);
+        strcat(m_url_real, m_url + 2); // 把 src 所指向的字符串追加到 dest 所指向的字符串的结尾
         strncpy(m_real_file + len, m_url_real, FILENAME_LEN - len - 1);
         free(m_url_real);
 
@@ -418,6 +436,7 @@ http_conn::HTTP_CODE http_conn::do_request()
             password[j] = m_string[i];
         password[j] = '\0';
 
+        // HTML中：<form action="3CGISQL.cgi" method="post">，所以这里检验‘2’就可以了
         if (*(p + 1) == '3')
         {
             //如果是注册，先检测数据库中是否有重名的
@@ -430,7 +449,7 @@ http_conn::HTTP_CODE http_conn::do_request()
             strcat(sql_insert, password);
             strcat(sql_insert, "')");
 
-            if (users.find(name) == users.end())
+            if (users.find(name) == users.end()) // 没有重名的
             {
                 m_lock.lock();
                 int res = mysql_query(mysql, sql_insert);
@@ -447,7 +466,8 @@ http_conn::HTTP_CODE http_conn::do_request()
         }
         //如果是登录，直接判断
         //若浏览器端输入的用户名和密码在表中可以查找到，返回1，否则返回0
-        else if (*(p + 1) == '2')
+        // HTML中：<form action="2CGISQL.cgi" method="post">，所以这里检验‘2’就可以了
+        else if (*(p + 1) == '2') 
         {
             if (users.find(name) != users.end() && users[name] == password)
                 strcpy(m_url, "/welcome.html");
@@ -456,7 +476,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         }
     }
 
-    if (*(p + 1) == '0')
+    if (*(p + 1) == '0') // 0 1是写在html中的，点击网页按钮会发布post报文
     {
         char *m_url_real = (char *)malloc(sizeof(char) * 200);
         strcpy(m_url_real, "/register.html");
@@ -497,7 +517,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         free(m_url_real);
     }
     else
-        strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1);
+        strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1); // 把 src 所指向的字符串复制到 dest，最多复制 n 个字符。当 src 的长度小于 n 时，dest 的剩余部分将用空字节填充
 
     if (stat(m_real_file, &m_file_stat) < 0)
         return NO_RESOURCE;
@@ -508,7 +528,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     if (S_ISDIR(m_file_stat.st_mode))
         return BAD_REQUEST;
 
-    int fd = open(m_real_file, O_RDONLY);
+    int fd = open(m_real_file, O_RDONLY); // 打开请求的资源
     m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
     return FILE_REQUEST;
@@ -685,7 +705,9 @@ bool http_conn::process_write(HTTP_CODE ret)
     bytes_to_send = m_write_idx;
     return true;
 }
-void http_conn::process()
+
+// 调用这个之前线程会先调用read_once把套接字中的数据读到http_conn的缓存中
+void http_conn::process() 
 {
     HTTP_CODE read_ret = process_read();
     if (read_ret == NO_REQUEST)

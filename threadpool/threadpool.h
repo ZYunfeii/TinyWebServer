@@ -91,19 +91,21 @@ bool threadpool<T>::append_p(T *request)
     m_queuestat.post();
     return true;
 }
+
 template <typename T>
-void *threadpool<T>::worker(void *arg)
+void *threadpool<T>::worker(void *arg) // 线程传入的是this指针，在线程中调用run
 {
     threadpool *pool = (threadpool *)arg;
     pool->run();
     return pool;
 }
+
 template <typename T>
 void threadpool<T>::run()
 {
     while (true)
     {
-        m_queuestat.wait();
+        m_queuestat.wait(); // V操作
         m_queuelocker.lock();
         if (m_workqueue.empty())
         {
@@ -117,7 +119,7 @@ void threadpool<T>::run()
             continue;
         if (1 == m_actor_model)
         {
-            if (0 == request->m_state)
+            if (0 == request->m_state) // 0：读事件（client发送消息过来） 1：写事件
             {
                 if (request->read_once())
                 {

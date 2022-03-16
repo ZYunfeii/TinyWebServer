@@ -50,11 +50,11 @@ void connection_pool::init(string url, string User, string PassWord, string DBNa
 			LOG_ERROR("MySQL Error");
 			exit(1);
 		}
-		connList.push_back(con);
-		++m_FreeConn;
+		connList.push_back(con); // 加入数据链接池list中
+		++m_FreeConn; // 当前空闲连接数加1
 	}
 
-	reserve = sem(m_FreeConn);
+	reserve = sem(m_FreeConn); // 如果没有意外信号量初始化为MaxConn
 
 	m_MaxConn = m_FreeConn;
 }
@@ -96,7 +96,7 @@ bool connection_pool::ReleaseConnection(MYSQL *con)
 
 	lock.unlock();
 
-	reserve.post();
+	reserve.post(); // 执行P操作
 	return true;
 }
 

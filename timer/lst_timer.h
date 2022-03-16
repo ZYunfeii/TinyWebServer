@@ -41,7 +41,7 @@ public:
 public:
     time_t expire;
     
-    void (* cb_func)(client_data *);
+    void (* cb_func)(client_data *); // 函数指针声明（注意不能去掉左端括号，否则就是一个返回空指针的函数申明了）
     client_data *user_data;
     util_timer *prev;
     util_timer *next;

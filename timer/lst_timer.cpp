@@ -25,17 +25,17 @@ void sort_timer_lst::add_timer(util_timer *timer)
     }
     if (!head)
     {
-        head = tail = timer;
+        head = tail = timer; // 第一个加入的作为头也是尾（双向链表）
         return;
     }
-    if (timer->expire < head->expire)
+    if (timer->expire < head->expire) // 保持头的expire最小
     {
-        timer->next = head;
+        timer->next = head; // 把timer插到head之前
         head->prev = timer;
         head = timer;
-        return;
+        return; // 这里就直接返回了
     }
-    add_timer(timer, head);
+    add_timer(timer, head); // 如果timer的expire值在链表中间
 }
 void sort_timer_lst::adjust_timer(util_timer *timer)
 {
@@ -100,7 +100,7 @@ void sort_timer_lst::tick()
         return;
     }
     
-    time_t cur = time(NULL);
+    time_t cur = time(NULL);  // 获取从1970年1月1日00:00:00到现在为止经过了多少秒
     util_timer *tmp = head;
     while (tmp)
     {
@@ -125,9 +125,9 @@ void sort_timer_lst::add_timer(util_timer *timer, util_timer *lst_head)
     util_timer *tmp = prev->next;
     while (tmp)
     {
-        if (timer->expire < tmp->expire)
+        if (timer->expire < tmp->expire) // 链表是头小尾大，找到第一个expire大于timer->expire的节点，之后插入
         {
-            prev->next = timer;
+            prev->next = timer; // pre -> 待插入节点位置 -> tmp
             timer->next = tmp;
             tmp->prev = timer;
             timer->prev = prev;
@@ -136,7 +136,7 @@ void sort_timer_lst::add_timer(util_timer *timer, util_timer *lst_head)
         prev = tmp;
         tmp = tmp->next;
     }
-    if (!tmp)
+    if (!tmp) // 整个链表expire都比待插入的expire小则插入到尾部
     {
         prev->next = timer;
         timer->prev = prev;

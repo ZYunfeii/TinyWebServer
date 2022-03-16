@@ -7,7 +7,7 @@ WebServer::WebServer()
 
     //root文件夹路径
     char server_path[200];
-    getcwd(server_path, 200);
+    getcwd(server_path, 200);  // getcwd()会将当前工作目录的绝对路径复制到参数buffer所指的内存空间中,参数maxlen为buffer的空间大小。
     char root[6] = "/root";
     m_root = (char *)malloc(strlen(server_path) + strlen(root) + 1);
     strcpy(m_root, server_path);
@@ -91,7 +91,7 @@ void WebServer::sql_pool()
     m_connPool->init("localhost", m_user, m_passWord, m_databaseName, 3306, m_sql_num, m_close_log);
 
     //初始化数据库读取表
-    users->initmysql_result(m_connPool);
+    users->initmysql_result(m_connPool); // 内部初始化一个map记录已经有的user-passwd
 }
 
 void WebServer::thread_pool()
@@ -122,10 +122,15 @@ void WebServer::eventListen()
     struct sockaddr_in address;
     bzero(&address, sizeof(address));
     address.sin_family = AF_INET;
+    // socket INADDR_ANY 监听0.0.0.0地址 socket只绑定端口让路由表决定传到哪个ip
+    // 其中INADDR_ANY就是指定地址为0.0.0.0的地址,这个地址事实上表示不确定地址,或“所有地址”、“任意地址”。
+    // 如果指定ip地址为通配地址(INADDR_ANY)，那么内核将等到套接字已连接(TCP)或已在套接字上发出数据报时才选择一个本地IP地址。
+    // 告诉操作系统：“我需要在 yyyy 端口上侦听，所以发送到服务器的这个端口，不管是哪个网卡/哪个IP地址接收到的数据，都是我处理的。”这时候，服务器则在0.0.0.0这个地址上进行侦听。
     address.sin_addr.s_addr = htonl(INADDR_ANY);
     address.sin_port = htons(m_port);
 
     int flag = 1;
+    // SO_REUSEADDR设置为1,允许在bind ()过程中本地地址可重复使用
     setsockopt(m_listenfd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
     ret = bind(m_listenfd, (struct sockaddr *)&address, sizeof(address));
     assert(ret >= 0);
@@ -134,7 +139,7 @@ void WebServer::eventListen()
 
     utils.init(TIMESLOT);
 
-    //epoll创建内核事件表
+    // epoll创建内核事件表
     epoll_event events[MAX_EVENT_NUMBER];
     m_epollfd = epoll_create(5);
     assert(m_epollfd != -1);
@@ -151,7 +156,7 @@ void WebServer::eventListen()
     utils.addsig(SIGALRM, utils.sig_handler, false);
     utils.addsig(SIGTERM, utils.sig_handler, false);
 
-    alarm(TIMESLOT);
+    alarm(TIMESLOT); // 5s SIGALERM
 
     //工具类,信号和描述符基础操作
     Utils::u_pipefd = m_pipefd;
@@ -160,6 +165,7 @@ void WebServer::eventListen()
 
 void WebServer::timer(int connfd, struct sockaddr_in client_address)
 {
+    // 下面这句话关键 connfd连接成功的套接字
     users[connfd].init(connfd, client_address, m_root, m_CONNTrigmode, m_close_log, m_user, m_passWord, m_databaseName);
 
     //初始化client_data数据
@@ -197,7 +203,7 @@ void WebServer::deal_timer(util_timer *timer, int sockfd)
     LOG_INFO("close fd %d", users_timer[sockfd].sockfd);
 }
 
-bool WebServer::dealclinetdata()
+bool WebServer::dealclientdata()
 {
     struct sockaddr_in client_address;
     socklen_t client_addrlength = sizeof(client_address);
@@ -282,6 +288,8 @@ void WebServer::dealwithread(int sockfd)
     util_timer *timer = users_timer[sockfd].timer;
 
     //reactor
+    // Reactor模式：要求主线程（I/O处理单元）只负责监听文件描述符上是否有事件发生（可读、可写），
+    // 若有，则立即通知工作线程（逻辑单元），将socket可读可写事件放入请求队列，交给工作线程处理。
     if (1 == m_actormodel)
     {
         if (timer)
@@ -290,7 +298,7 @@ void WebServer::dealwithread(int sockfd)
         }
 
         //若监测到读事件，将该事件放入请求队列
-        m_pool->append(users + sockfd, 0);
+        m_pool->append(users + sockfd, 0); 
 
         while (true)
         {
@@ -309,6 +317,8 @@ void WebServer::dealwithread(int sockfd)
     else
     {
         //proactor
+        // Proactor模式：将所有的I/O操作都交给主线程和内核来处理（进行读、写），工作线程仅负责处理逻辑，
+        // 如主线程读完成后users[sockfd].read()，选择一个工作线程来处理客户请求pool->append(users + sockfd)。
         if (users[sockfd].read_once())
         {
             LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
@@ -395,7 +405,7 @@ void WebServer::eventLoop()
             //处理新到的客户连接
             if (sockfd == m_listenfd)
             {
-                bool flag = dealclinetdata();
+                bool flag = dealclientdata();
                 if (false == flag)
                     continue;
             }
