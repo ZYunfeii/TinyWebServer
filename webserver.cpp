@@ -145,7 +145,7 @@ void WebServer::eventListen()
     assert(m_epollfd != -1);
 
     utils.addfd(m_epollfd, m_listenfd, false, m_LISTENTrigmode);
-    http_conn::m_epollfd = m_epollfd;
+    http_conn::m_epollfd = m_epollfd;   // 所有http对象都共享一个static的epollfd，内部会修改里面事件epollout或是epollin，然后server主线程来负责监听
 
     ret = socketpair(PF_UNIX, SOCK_STREAM, 0, m_pipefd);
     assert(ret != -1);
@@ -319,7 +319,7 @@ void WebServer::dealwithread(int sockfd)
         //proactor
         // Proactor模式：将所有的I/O操作都交给主线程和内核来处理（进行读、写），工作线程仅负责处理逻辑，
         // 如主线程读完成后users[sockfd].read()，选择一个工作线程来处理客户请求pool->append(users + sockfd)。
-        if (users[sockfd].read_once())
+        if (users[sockfd].read_once()) // proactor是在这里read_once的，也就是proactor是在主线程来负责读socket，而reactor是在子线程中调用read_once的
         {
             LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
 

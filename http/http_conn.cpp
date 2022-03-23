@@ -196,8 +196,8 @@ http_conn::LINE_STATUS http_conn::parse_line()
     return LINE_OPEN;
 }
 
-//循环读取客户数据，直到无数据可读或对方关闭连接
-//非阻塞ET工作模式下，需要一次性将数据读完
+// 循环读取客户数据，直到无数据可读或对方关闭连接
+// 非阻塞ET工作模式下，需要一次性将数据读完
 bool http_conn::read_once()  // 线程池将自动调用它读取消息
 {
     if (m_read_idx >= READ_BUFFER_SIZE)
@@ -209,8 +209,8 @@ bool http_conn::read_once()  // 线程池将自动调用它读取消息
     //LT读取数据
     if (0 == m_TRIGMode)
     {
-        bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
-        m_read_idx += bytes_read;
+        bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0); // ssize_t recv(int sockfd,void *buf,size_t len,int flags)
+        m_read_idx += bytes_read; // m_read_idx 当前读到的位置
 
         if (bytes_read <= 0)
         {
@@ -219,7 +219,7 @@ bool http_conn::read_once()  // 线程池将自动调用它读取消息
 
         return true;
     }
-    //ET读数据
+    //ET读数据 （ET只会触发一次，所以要一次性读完）
     else
     {
         while (true)
@@ -227,7 +227,7 @@ bool http_conn::read_once()  // 线程池将自动调用它读取消息
             bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
             if (bytes_read == -1)
             {
-                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                if (errno == EAGAIN || errno == EWOULDBLOCK) // EAGAIN的意思：就是要你再次尝试 这两个标志是一个东西 意思就是资源短暂不可用
                     break;
                 return false;
             }
@@ -707,10 +707,11 @@ bool http_conn::process_write(HTTP_CODE ret)
 }
 
 // 调用这个之前线程会先调用read_once把套接字中的数据读到http_conn的缓存中
+// reactor是在子线程中read_once的，proactor是在主线程中read_once的
 void http_conn::process() 
 {
     HTTP_CODE read_ret = process_read();
-    if (read_ret == NO_REQUEST)
+    if (read_ret == NO_REQUEST) // 没有请求 
     {
         modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
         return;

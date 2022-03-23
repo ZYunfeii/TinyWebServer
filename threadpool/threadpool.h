@@ -101,7 +101,7 @@ void *threadpool<T>::worker(void *arg) // 线程传入的是this指针，在线�
 }
 
 template <typename T>
-void threadpool<T>::run()
+void threadpool<T>::run() // 线程池中的线程将在正常工作时反复运行这其中的循环
 {
     while (true)
     {
@@ -117,7 +117,7 @@ void threadpool<T>::run()
         m_queuelocker.unlock();
         if (!request)
             continue;
-        if (1 == m_actor_model)
+        if (1 == m_actor_model)  // 1：reactor  0：proactor
         {
             if (0 == request->m_state) // 0：读事件（client发送消息过来） 1：写事件
             {
