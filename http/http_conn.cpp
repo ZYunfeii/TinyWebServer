@@ -403,17 +403,18 @@ http_conn::HTTP_CODE http_conn::process_read()
     return NO_REQUEST;
 }
 
+// http响应核心逻辑在下面这个函数中，扩展web服务器功能、二次开发在这里进行
 http_conn::HTTP_CODE http_conn::do_request()
 {
     strcpy(m_real_file, doc_root);
-    int len = strlen(doc_root);
+    int len = strlen(doc_root);  // doc_root就是当前server运行的根目录
     //printf("m_url:%s\n", m_url);
     const char *p = strrchr(m_url, '/');
 
     //处理cgi
-    if (cgi == 1 && (*(p + 1) == '2' || *(p + 1) == '3'))
+    if (cgi == 1 && (*(p + 1) == '2' || *(p + 1) == '3')) // 2 和 3是登录和注册
     {
-
+        
         //根据标志判断是登录检测还是注册检测
         char flag = m_url[1];
 
@@ -436,7 +437,7 @@ http_conn::HTTP_CODE http_conn::do_request()
             password[j] = m_string[i];
         password[j] = '\0';
 
-        // HTML中：<form action="3CGISQL.cgi" method="post">，所以这里检验‘2’就可以了
+        // HTML中：<form action="3CGISQL.cgi" method="post">，所以这里检验‘3’就可以了
         if (*(p + 1) == '3')
         {
             //如果是注册，先检测数据库中是否有重名的
@@ -516,6 +517,38 @@ http_conn::HTTP_CODE http_conn::do_request()
 
         free(m_url_real);
     }
+    else if (*(p + 1) == '8')   // 日记功能
+    {
+        char *m_url_real = (char *)malloc(sizeof(char) * 200);
+        strcpy(m_url_real, "/diary.html");
+        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+        free(m_url_real);
+    }
+    else if (*(p + 1) == '9')   // 日记提交功能(未完成)
+    {
+        char diary_content[100];
+        int i;
+        for (i = 6; m_string[i] != '\0'; ++i)  // 注意html表单中必须设置name属性才能通过网络传递内容到服务器
+            diary_content[i - 6] = m_string[i];
+        diary_content[i] = '\0';
+        std::cout<<diary_content<<std::endl;
+
+        char *sql_insert = (char *)malloc(sizeof(char) * 200);
+        sprintf(sql_insert, "update user set content =  '%s' where username = '%s'", diary_content, "yunfei");
+
+        m_lock.lock();
+        // 可能多个线程同时修改数据库，因此要加锁
+        int res = mysql_query(mysql, sql_insert);
+        m_lock.unlock();
+        if (res) std::cout<<"diary insert fail"<<std::endl;
+
+        char *m_url_real = (char *)malloc(sizeof(char) * 200);
+        strcpy(m_url_real, "/diary.html");
+        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+        free(m_url_real);
+    }
     else
         strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1); // 把 src 所指向的字符串复制到 dest，最多复制 n 个字符。当 src 的长度小于 n 时，dest 的剩余部分将用空字节填充
 
@@ -529,7 +562,11 @@ http_conn::HTTP_CODE http_conn::do_request()
         return BAD_REQUEST;
 
     int fd = open(m_real_file, O_RDONLY); // 打开请求的资源
-    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    // 将fd对应的文件全部映射到一块随机分配的内存（第一个参数为0随机分）
+    // PORT_READ表示内存段可读
+    // MAP_PRIVATE表示内存段为调用进程所私有，对内存段的修改不会反映到被映射的文件中（也就是m_real_file不会被影响）
+    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0); 
+
     close(fd);
     return FILE_REQUEST;
 }

@@ -135,7 +135,7 @@ void threadpool<T>::run() // 线程池中的线程将在正常工作时反复运
             }
             else
             {
-                if (request->write())
+                if (request->write()) // reactor在子线程中进行write，而proactor在主线程中调用write
                 {
                     request->improv = 1;
                 }

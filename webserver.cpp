@@ -349,7 +349,7 @@ void WebServer::dealwithwrite(int sockfd)
             adjust_timer(timer);
         }
 
-        m_pool->append(users + sockfd, 1);
+        m_pool->append(users + sockfd, 1); // reactor只是监听写操作，因此把任务扔进线程池中进行读
 
         while (true)
         {
@@ -368,7 +368,7 @@ void WebServer::dealwithwrite(int sockfd)
     else
     {
         //proactor
-        if (users[sockfd].write())
+        if (users[sockfd].write()) // proactor在主线程中进行写操作
         {
             LOG_INFO("send data to the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
 
