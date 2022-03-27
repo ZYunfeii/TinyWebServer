@@ -20,6 +20,7 @@
 #include <sys/wait.h>
 #include <sys/uio.h>
 #include <map>
+#include <iostream>
 
 #include "../lock/locker.h"
 #include "../CGImysql/sql_connection_pool.h"

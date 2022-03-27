@@ -17,6 +17,33 @@ const char *error_500_form = "There was an unusual problem serving the request f
 locker m_lock;
 map<string, string> users;
 
+static void save_diary2txt(char* text, char* username, char* file_root){
+    char data[1024];
+    ofstream outfile;
+    char c[128];
+    sprintf(c, "/%s.txt", username);
+    strcat(file_root, c);
+    outfile.open(file_root, ios::app);
+    outfile << text << '\n';
+}
+
+static void cpp_write_html(char* data_show){
+    ofstream myhtml;
+    myhtml.open("./root/my_dynamic_html.html", ios::out | ios::trunc);
+    myhtml << "<!DOCTYPE html>";
+    myhtml << "<html>";
+    myhtml << "<head><meta charset=\"UTF-8\"><title>elegant</title></head>";
+    myhtml << "<body><br/><br/>";
+
+    char src[1024];
+    sprintf(src, "<div align=\"center\"><font size=\"5\"> <strong>%s</strong></font></div>", data_show);
+    myhtml << src;
+
+    myhtml << "</body>";
+    myhtml << "</html>";
+
+}
+
 void http_conn::initmysql_result(connection_pool *connPool)
 {
     //先从连接池中取一个连接
@@ -425,7 +452,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         free(m_url_real);
 
         //将用户名和密码提取出来
-        //user=123&passwd=123
+        //user=123&password=123
         char name[100], password[100];
         int i;
         for (i = 5; m_string[i] != '&'; ++i)
@@ -485,7 +512,7 @@ http_conn::HTTP_CODE http_conn::do_request()
 
         free(m_url_real);
     }
-    else if (*(p + 1) == '1')
+    else if (*(p + 1) == '1' && *(p + 2) == '2')
     {
         char *m_url_real = (char *)malloc(sizeof(char) * 200);
         strcpy(m_url_real, "/log.html");
@@ -525,29 +552,81 @@ http_conn::HTTP_CODE http_conn::do_request()
 
         free(m_url_real);
     }
-    else if (*(p + 1) == '9')   // 日记提交功能(未完成)
+    else if (*(p + 1) == 'a' || *(p + 1) == 'b')   // 日记提交功能(未完成)
     {
+        // 获取文本框输入
         char diary_content[100];
         int i;
-        for (i = 6; m_string[i] != '\0'; ++i)  // 注意html表单中必须设置name属性才能通过网络传递内容到服务器
+        for (i = 6; m_string[i] != '&'; ++i)  // 注意html表单中必须设置name属性才能通过网络传递内容到服务器
             diary_content[i - 6] = m_string[i];
         diary_content[i] = '\0';
-        std::cout<<diary_content<<std::endl;
 
-        char *sql_insert = (char *)malloc(sizeof(char) * 200);
-        sprintf(sql_insert, "update user set content =  '%s' where username = '%s'", diary_content, "yunfei");
+        char user_name[100];
+        int j = 0;
+        for (i = i + 6; m_string[i] != '&'; ++i, ++j)
+            user_name[j] = m_string[i];
+        user_name[j] = '\0';
 
-        m_lock.lock();
-        // 可能多个线程同时修改数据库，因此要加锁
-        int res = mysql_query(mysql, sql_insert);
-        m_lock.unlock();
-        if (res) std::cout<<"diary insert fail"<<std::endl;
+        char passwd[100];
+        j = 0;
+        for (i = i + 10; m_string[i] != '\0'; ++i, ++j)
+            passwd[j] = m_string[i];
+        passwd[j] = '\0';
 
-        char *m_url_real = (char *)malloc(sizeof(char) * 200);
-        strcpy(m_url_real, "/diary.html");
-        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+        if(*(p + 1) == 'a'){
+            if (users.find(user_name) != users.end() && users[user_name] == passwd){ // 密码正确
+                char sql_update[256];
+                sprintf(sql_update, "update user set content =  '%s' where username = '%s'", diary_content, user_name);
 
-        free(m_url_real);
+                m_lock.lock();
+                // 可能多个线程同时修改数据库，因此要加锁
+                int res = mysql_query(mysql, sql_update);
+                m_lock.unlock();
+                if (res) std::cout<<"diary insert fail"<<std::endl;
+
+                char folder_path[128] = "./user_messages";
+                save_diary2txt(diary_content, user_name, folder_path);
+
+                char *m_url_real = (char *)malloc(sizeof(char) * 200);
+                strcpy(m_url_real, "/diary.html");
+                strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+                free(m_url_real);
+            }
+            else{
+                char *m_url_real = (char *)malloc(sizeof(char) * 200);
+                strcpy(m_url_real, "/diaryerror.html");
+                strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+                free(m_url_real);
+            }
+        }else if(*(p + 1) == 'b'){
+            if (users.find(user_name) != users.end() && users[user_name] == passwd){
+                char sql_get[256];
+                sprintf(sql_get, "select replay from user where username = '%s'", user_name);
+                int ret = mysql_query(mysql, sql_get);
+                if(ret != 0) std::cout << "mysql get replay error" << std::endl;
+                MYSQL_RES* sql_res;
+                MYSQL_ROW row;
+                sql_res = mysql_store_result(mysql);
+                row = mysql_fetch_row(sql_res); // 默认第一个匹配内容
+
+                char *m_url_real = (char *)malloc(sizeof(char) * 200);
+                cpp_write_html(row[0]);
+                strcpy(m_url_real, "/my_dynamic_html.html");
+                strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+                free(m_url_real);
+            }
+            else{
+                char *m_url_real = (char *)malloc(sizeof(char) * 200);
+                strcpy(m_url_real, "/diaryerror.html");
+                strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+                free(m_url_real);
+            }
+        }
+        
     }
     else
         strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1); // 把 src 所指向的字符串复制到 dest，最多复制 n 个字符。当 src 的长度小于 n 时，dest 的剩余部分将用空字节填充
