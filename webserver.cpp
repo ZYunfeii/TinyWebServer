@@ -176,7 +176,7 @@ void WebServer::timer(int connfd, struct sockaddr_in client_address)
     timer->user_data = &users_timer[connfd];
     timer->cb_func = cb_func;
     time_t cur = time(NULL);
-    timer->expire = cur + 3 * TIMESLOT;
+    timer->expire = cur + 3 * TIMESLOT; // 在timer的tick函数中将检验expire和那时候的cur大小，若小则删除，如果在这期间有数据传输，则将expire往后延迟3个单位
     users_timer[connfd].timer = timer;
     utils.m_timer_lst.add_timer(timer);
 }
@@ -186,7 +186,7 @@ void WebServer::timer(int connfd, struct sockaddr_in client_address)
 void WebServer::adjust_timer(util_timer *timer)
 {
     time_t cur = time(NULL);
-    timer->expire = cur + 3 * TIMESLOT;
+    timer->expire = cur + 3 * TIMESLOT; // 更新失效期
     utils.m_timer_lst.adjust_timer(timer);
 
     LOG_INFO("%s", "adjust timer once");
@@ -418,7 +418,7 @@ void WebServer::eventLoop()
             //处理信号
             else if ((sockfd == m_pipefd[0]) && (events[i].events & EPOLLIN))
             {
-                bool flag = dealwithsignal(timeout, stop_server);
+                bool flag = dealwithsignal(timeout, stop_server); // 将timeout设置为true 进入之后的timer_handler
                 if (false == flag)
                     LOG_ERROR("%s", "dealclientdata failure");
             }

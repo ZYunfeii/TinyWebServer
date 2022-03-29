@@ -324,15 +324,18 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 
 //解析http请求的一个头部信息
 // 为方便理解，给出一个HTTP请求报文案例：
-// GET /somedir/page.html HTTP/1.1
-// Host:www.someschool.edu
-// Connection:Close
-// User-agent:Mozilla/5.0
-// Accept-language:fr
+// POST / HTTP1.1
+// Host:www.wrox.com
+// User-Agent:Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1; .NET CLR 2.0.50727; .NET CLR 3.0.04506.648; .NET CLR 3.5.21022)
+// Content-Type:application/x-www-form-urlencoded
+// Content-Length:40
+// Connection: Keep-Alive
+// 空行
+// name=Professional%20Ajax&publisher=Wiley
 http_conn::HTTP_CODE http_conn::parse_headers(char *text)
 {
     // 这个函数是循环被执行的（因为首部行有多个，当所有行信息都读入后text[0] == '\0'）
-    if (text[0] == '\0')
+    if (text[0] == '\0') // 空行后面有数据部分
     {
         if (m_content_length != 0)
         {
@@ -369,19 +372,25 @@ http_conn::HTTP_CODE http_conn::parse_headers(char *text)
     return NO_REQUEST;
 }
 
-//判断http请求是否被完整读入
+// 判断http请求是否被完整读入
+// text传入时候是数据部分的头指针
+// m_checked_idx正常情况也指向数据部分头指针前一个？
+// m_read_idx正常情况下指向数据尾部
 http_conn::HTTP_CODE http_conn::parse_content(char *text)
 {
     if (m_read_idx >= (m_content_length + m_checked_idx))
     {
         text[m_content_length] = '\0';
-        //POST请求中最后为输入的用户名和密码
+        //POST请求中最后为数据
         m_string = text;
         return GET_REQUEST;
     }
     return NO_REQUEST;
 }
 
+// 主从状态机解析HTTP 主状态机内部调用从状态机 从状态机驱动主状态机
+// 每解析一部分都会将整个请求的m_check_state状态改变，状态机也就是根据这个状态来进行不同部分的解析跳转
+// parse_line从状态机
 http_conn::HTTP_CODE http_conn::process_read()
 {
     LINE_STATUS line_status = LINE_OK;
@@ -628,6 +637,22 @@ http_conn::HTTP_CODE http_conn::do_request()
         }
         
     }
+    else if(*(p + 1) == 'c'){ // 进入上传文件界面
+        char *m_url_real = (char *)malloc(sizeof(char) * 200);
+        strcpy(m_url_real, "/fileupload.html");
+        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+        free(m_url_real);
+    }
+    else if(*(p + 1) == 'd'){ // client提交上传文件post请求
+        std::cout<<m_string<<std::endl;
+
+        char *m_url_real = (char *)malloc(sizeof(char) * 200);
+        strcpy(m_url_real, "/fileupload.html");
+        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+        free(m_url_real);
+    }
     else
         strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1); // 把 src 所指向的字符串复制到 dest，最多复制 n 个字符。当 src 的长度小于 n 时，dest 的剩余部分将用空字节填充
 
@@ -790,7 +815,7 @@ bool http_conn::process_write(HTTP_CODE ret)
             return false;
         break;
     }
-    case FILE_REQUEST:
+    case FILE_REQUEST: // 正常情况
     {
         add_status_line(200, ok_200_title);
         if (m_file_stat.st_size != 0)

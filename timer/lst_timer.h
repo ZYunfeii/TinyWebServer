@@ -33,13 +33,13 @@ struct client_data
     util_timer *timer;
 };
 
-class util_timer
+class util_timer // 双端链表结点定义
 {
 public:
     util_timer() : prev(NULL), next(NULL) {}
 
 public:
-    time_t expire;
+    time_t expire; // “死亡时间”
     
     void (* cb_func)(client_data *); // 函数指针声明（注意不能去掉左端括号，否则就是一个返回空指针的函数申明了）
     client_data *user_data;

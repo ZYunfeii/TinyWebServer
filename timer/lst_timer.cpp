@@ -93,6 +93,8 @@ void sort_timer_lst::del_timer(util_timer *timer)
     timer->next->prev = timer->prev;
     delete timer;
 }
+
+// 从头到尾对检查任务是否超时，若超时则调用定时器的回调函数cb_func()，关闭该socket连接，并删除其对应的定时器del_timer
 void sort_timer_lst::tick()
 {
     if (!head)
@@ -104,7 +106,7 @@ void sort_timer_lst::tick()
     util_timer *tmp = head;
     while (tmp)
     {
-        if (cur < tmp->expire)
+        if (cur < tmp->expire) 
         {
             break;
         }
@@ -177,6 +179,7 @@ void Utils::addfd(int epollfd, int fd, bool one_shot, int TRIGMode)
 }
 
 //信号处理函数
+// 每当监测到有这个信号的时候，都会将这个信号写到pipefd[1]里面，传递给主循环
 void Utils::sig_handler(int sig)
 {
     //为保证函数的可重入性，保留原来的errno
@@ -199,6 +202,8 @@ void Utils::addsig(int sig, void(handler)(int), bool restart)
 }
 
 //定时处理任务，重新定时以不断触发SIGALRM信号
+// timer_handler()函数取出来定时器容器上的到期任务，该定时器容器是通过升序链表来实现的，从头到尾对检查任务是否超时
+// 若超时则调用定时器的回调函数cb_func()，关闭该socket连接，并删除其对应的定时器del_timer
 void Utils::timer_handler()
 {
     m_timer_lst.tick();
