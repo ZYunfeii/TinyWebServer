@@ -31,7 +31,7 @@ class http_conn
 {
 public:
     static const int FILENAME_LEN = 200; // 文件名的最大长度
-    static const int READ_BUFFER_SIZE = 2048;
+    static const int READ_BUFFER_SIZE = 300000;
     static const int WRITE_BUFFER_SIZE = 1024;
     enum METHOD
     {
@@ -161,6 +161,9 @@ private:
     char sql_user[100];
     char sql_passwd[100];
     char sql_name[100];
+
+private:
+    void binary_write_data();
 };
 
 #endif

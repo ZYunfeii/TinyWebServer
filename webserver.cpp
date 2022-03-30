@@ -4,6 +4,7 @@ WebServer::WebServer()
 {
     //http_conn类对象
     users = new http_conn[MAX_FD];
+    // users = new http_conn[100];
 
     //root文件夹路径
     char server_path[200];

@@ -2,6 +2,7 @@
 
 #include <mysql/mysql.h>
 #include <fstream>
+#include <time.h>
 
 //定义http响应的一些状态信息
 const char *ok_200_title = "OK";
@@ -16,6 +17,13 @@ const char *error_500_form = "There was an unusual problem serving the request f
 
 locker m_lock;
 map<string, string> users;
+
+static void m_sleep(int timeout){
+    struct timeval sTime;
+    sTime.tv_sec = 0;
+    sTime.tv_usec = timeout * 1000; // ms
+    select(0, NULL, NULL, NULL, &sTime);
+}
 
 static void save_diary2txt(char* text, char* username, char* file_root){
     char data[1024];
@@ -41,7 +49,24 @@ static void cpp_write_html(char* data_show){
 
     myhtml << "</body>";
     myhtml << "</html>";
+}
 
+void http_conn::binary_write_data(){
+    char* ptr_real_data = m_string;
+    int count_r_n = 4;
+    while(count_r_n){
+        if((*ptr_real_data == '\r') && (*(ptr_real_data + 1) == '\n')){
+            count_r_n--;
+        }
+        ptr_real_data++;
+    }
+    ptr_real_data++;
+    int offset = ptr_real_data - m_string;
+
+    ofstream ofs;
+    ofs.open("./user_messages/fileuploadData", ios::out | ios::binary);
+    ofs.write(ptr_real_data, m_content_length - 44 - offset);
+    ofs.close();
 }
 
 void http_conn::initmysql_result(connection_pool *connPool)
@@ -249,6 +274,10 @@ bool http_conn::read_once()  // 线程池将自动调用它读取消息
     //ET读数据 （ET只会触发一次，所以要一次性读完）
     else
     {
+        // 弥天bug，没想通原理。项目在调试的时候断点加在recv后就能上传，如果不加断点上线运行就不行
+        // 感觉是内核还没准备好recv亦或是vmware bug，所以手动在这里sleep
+        m_sleep(300); 
+    
         while (true)
         {
             bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
@@ -645,7 +674,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         free(m_url_real);
     }
     else if(*(p + 1) == 'd'){ // client提交上传文件post请求
-        std::cout<<m_string<<std::endl;
+        binary_write_data();
 
         char *m_url_real = (char *)malloc(sizeof(char) * 200);
         strcpy(m_url_real, "/fileupload.html");
@@ -674,6 +703,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     close(fd);
     return FILE_REQUEST;
 }
+
 void http_conn::unmap()
 {
     if (m_file_address)
@@ -682,6 +712,7 @@ void http_conn::unmap()
         m_file_address = 0;
     }
 }
+
 bool http_conn::write()
 {
     int temp = 0;
@@ -739,6 +770,7 @@ bool http_conn::write()
         }
     }
 }
+
 bool http_conn::add_response(const char *format, ...)
 {
     if (m_write_idx >= WRITE_BUFFER_SIZE)
@@ -758,6 +790,7 @@ bool http_conn::add_response(const char *format, ...)
 
     return true;
 }
+
 bool http_conn::add_status_line(int status, const char *title)
 {
     return add_response("%s %d %s\r\n", "HTTP/1.1", status, title);
