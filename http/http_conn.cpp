@@ -715,7 +715,7 @@ bool http_conn::write()
 
     while (1)
     {
-        temp =  (m_sockfd, m_iv, m_iv_count);
+        temp =  writev(m_sockfd, m_iv, m_iv_count);
 
         if (temp < 0)
         {
