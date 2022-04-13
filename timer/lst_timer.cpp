@@ -201,7 +201,7 @@ void Utils::addsig(int sig, void(handler)(int), bool restart)
     assert(sigaction(sig, &sa, NULL) != -1);
 }
 
-//定时处理任务，重新定时以不断触发SIGALRM信号
+// 定时处理任务，重新定时以不断触发SIGALRM信号
 // timer_handler()函数取出来定时器容器上的到期任务，该定时器容器是通过升序链表来实现的，从头到尾对检查任务是否超时
 // 若超时则调用定时器的回调函数cb_func()，关闭该socket连接，并删除其对应的定时器del_timer
 void Utils::timer_handler()
@@ -222,8 +222,8 @@ int Utils::u_epollfd = 0;
 class Utils;
 void cb_func(client_data *user_data)
 {
-    epoll_ctl(Utils::u_epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0);
+    epoll_ctl(Utils::u_epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0); // 关闭epoll监听该套接字
     assert(user_data);
-    close(user_data->sockfd);
+    close(user_data->sockfd); // 再关闭套接字本身
     http_conn::m_user_count--;
 }

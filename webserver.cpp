@@ -79,9 +79,9 @@ void WebServer::log_write()
     {
         //初始化日志
         if (1 == m_log_write)
-            Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000, 800);
+            Log::get_instance()->init("./logfiles/ServerLog", m_close_log, 2000, 800000, 800);
         else
-            Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000, 0);
+            Log::get_instance()->init("./logfiles/ServerLog", m_close_log, 2000, 800000, 0);
     }
 }
 
@@ -107,10 +107,10 @@ void WebServer::eventListen()
     m_listenfd = socket(PF_INET, SOCK_STREAM, 0);
     assert(m_listenfd >= 0);
 
-    //优雅关闭连接
+    //优雅关闭连接  https://www.cnblogs.com/caosiyang/archive/2012/03/29/2422956.html
     if (0 == m_OPT_LINGER)
     {
-        struct linger tmp = {0, 1};
+        struct linger tmp = {0, 1}; // Elegant exit
         setsockopt(m_listenfd, SOL_SOCKET, SO_LINGER, &tmp, sizeof(tmp));
     }
     else if (1 == m_OPT_LINGER)
@@ -295,7 +295,7 @@ void WebServer::dealwithread(int sockfd)
     {
         if (timer)
         {
-            adjust_timer(timer);
+            adjust_timer(timer); // 客户端那边有数据写入 所以要重新调整以下timer list，具体来说就是延迟死亡期限
         }
 
         //若监测到读事件，将该事件放入请求队列
@@ -317,7 +317,7 @@ void WebServer::dealwithread(int sockfd)
     }
     else
     {
-        //proactor
+        // proactor
         // Proactor模式：将所有的I/O操作都交给主线程和内核来处理（进行读、写），工作线程仅负责处理逻辑，
         // 如主线程读完成后users[sockfd].read()，选择一个工作线程来处理客户请求pool->append(users + sockfd)。
         if (users[sockfd].read_once()) // proactor是在这里read_once的，也就是proactor是在主线程来负责读socket，而reactor是在子线程中调用read_once的
@@ -325,7 +325,7 @@ void WebServer::dealwithread(int sockfd)
             LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
 
             //若监测到读事件，将该事件放入请求队列
-            m_pool->append_p(users + sockfd);
+            m_pool->append_p(users + sockfd); // proactor是用append_p，内部不需要read了
 
             if (timer)
             {
@@ -412,6 +412,9 @@ void WebServer::eventLoop()
             }
             else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
             {
+                // EPOLLRDHUP:TCP连接被对方关闭，或者对方关闭了写操作
+                // EPOLLHUP：挂起 比如管道写端被关闭后 读端描述符上将受到该事件
+                // EPOLLERR：错误
                 //服务器端关闭连接，移除对应的定时器
                 util_timer *timer = users_timer[sockfd].timer;
                 deal_timer(timer, sockfd);
@@ -430,16 +433,16 @@ void WebServer::eventLoop()
             }
             else if (events[i].events & EPOLLOUT)
             {
-                dealwithwrite(sockfd);
+                dealwithwrite(sockfd); // 往客户端写数据 e.g HTML
             }
         }
-        if (timeout)
+        if (timeout) // 定时断开非活跃连接
         {
-            utils.timer_handler();
+            utils.timer_handler(); // 这个里面进行非活跃连接删除
 
             LOG_INFO("%s", "timer tick");
 
-            timeout = false;
+            timeout = false; // 重新置为false
         }
     }
 }

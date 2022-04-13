@@ -208,6 +208,8 @@ void http_conn::init()
     timer_flag = 0;
     improv = 0;
 
+    if_use_cookie = false;  // 一开始发送报文不带cookie
+
     memset(m_read_buf, '\0', READ_BUFFER_SIZE);
     memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
     memset(m_real_file, '\0', FILENAME_LEN);
@@ -275,16 +277,19 @@ bool http_conn::read_once()  // 线程池将自动调用它读取消息
     else
     {
         // 弥天bug，没想通原理。项目在调试的时候断点加在recv后就能上传，如果不加断点上线运行就不行
-        // 感觉是内核还没准备好recv亦或是vmware bug，所以手动在这里sleep
-        m_sleep(300); 
-    
+        
+        // m_sleep(300);
+        int count = 0; 
         while (true)
         {
             bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+            std::cout<<bytes_read<<std::endl;
             if (bytes_read == -1)
             {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) // EAGAIN的意思：就是要你再次尝试 这两个标志是一个东西 意思就是资源短暂不可用
+                if (errno == EAGAIN || errno == EWOULDBLOCK){ // EAGAIN的意思：就是要你再次尝试 这两个标志是一个东西 意思就是资源短暂不可用
                     break;
+                }
+                std::cout<<"errno:"<<errno<<std::endl;
                 return false;
             }
             else if (bytes_read == 0)
@@ -394,6 +399,15 @@ http_conn::HTTP_CODE http_conn::parse_headers(char *text)
         text += strspn(text, " \t");
         m_host = text;
     }
+    else if (strncasecmp(text, "Cookie:", 7) == 0)
+    {
+        text += 7;
+        text += strspn(text, " \t");
+        int i = 0;
+        while(text[i] != '=') ++i;
+        strcpy(m_recv_cookie, text + i + 1);
+        std::cout<<"Cookie from client:"<<m_recv_cookie<<std::endl;
+    }
     else
     {
         LOG_INFO("oop!unknow header: %s", text);
@@ -473,7 +487,6 @@ http_conn::HTTP_CODE http_conn::do_request()
 {
     strcpy(m_real_file, doc_root);
     int len = strlen(doc_root);  // doc_root就是当前server运行的根目录
-    //printf("m_url:%s\n", m_url);
     const char *p = strrchr(m_url, '/');
 
     //处理cgi
@@ -507,6 +520,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         {
             //如果是注册，先检测数据库中是否有重名的
             //没有重名的，进行增加数据
+
             char *sql_insert = (char *)malloc(sizeof(char) * 200);
             strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
             strcat(sql_insert, "'");
@@ -517,6 +531,8 @@ http_conn::HTTP_CODE http_conn::do_request()
 
             if (users.find(name) == users.end()) // 没有重名的
             {
+                if_use_cookie = true; // 开启cookie
+                strcpy(m_send_cookie, name);  // cookie设置为用户name
                 m_lock.lock();
                 int res = mysql_query(mysql, sql_insert);
                 users.insert(pair<string, string>(name, password));
@@ -530,13 +546,17 @@ http_conn::HTTP_CODE http_conn::do_request()
             else
                 strcpy(m_url, "/registerError.html");
         }
-        //如果是登录，直接判断
-        //若浏览器端输入的用户名和密码在表中可以查找到，返回1，否则返回0
-        // HTML中：<form action="2CGISQL.cgi" method="post">，所以这里检验‘2’就可以了
         else if (*(p + 1) == '2') 
         {
-            if (users.find(name) != users.end() && users[name] == password)
+            //如果是登录，直接判断
+            //若浏览器端输入的用户名和密码在表中可以查找到，返回1，否则返回0
+            // HTML中：<form action="2CGISQL.cgi" method="post">，所以这里检验‘2’就可以了
+            
+            if (users.find(name) != users.end() && users[name] == password){
+                if_use_cookie = true;
+                strcpy(m_send_cookie, name);
                 strcpy(m_url, "/welcome.html");
+            }
             else
                 strcpy(m_url, "/logError.html");
         }
@@ -594,54 +614,32 @@ http_conn::HTTP_CODE http_conn::do_request()
     {
         // 获取文本框输入
         char diary_content[100];
-        int i;
-        for (i = 6; m_string[i] != '&'; ++i)  // 注意html表单中必须设置name属性才能通过网络传递内容到服务器
-            diary_content[i - 6] = m_string[i];
-        diary_content[i] = '\0';
-
-        char user_name[100];
-        int j = 0;
-        for (i = i + 6; m_string[i] != '&'; ++i, ++j)
-            user_name[j] = m_string[i];
-        user_name[j] = '\0';
-
-        char passwd[100];
-        j = 0;
-        for (i = i + 10; m_string[i] != '\0'; ++i, ++j)
-            passwd[j] = m_string[i];
-        passwd[j] = '\0';
+        int i = 0;
+        while(m_string[i] != '=') ++i;
+        strcpy(diary_content, m_string + i + 1);
 
         if(*(p + 1) == 'a'){
-            if (users.find(user_name) != users.end() && users[user_name] == passwd){ // 密码正确
-                char sql_update[256];
-                sprintf(sql_update, "update user set content =  '%s' where username = '%s'", diary_content, user_name);
+            // 目前cookie就是user_name
+            char sql_update[256];
+            sprintf(sql_update, "update user set content =  '%s' where username = '%s'", diary_content, m_recv_cookie);
 
-                m_lock.lock();
-                // 可能多个线程同时修改数据库，因此要加锁
-                int res = mysql_query(mysql, sql_update);
-                m_lock.unlock();
-                if (res) std::cout<<"diary insert fail"<<std::endl;
+            m_lock.lock();
+            // 可能多个线程同时修改数据库，因此要加锁
+            int res = mysql_query(mysql, sql_update);
+            m_lock.unlock();
+            if (res) std::cout<<"diary insert fail"<<std::endl;
 
-                char folder_path[128] = "./user_messages";
-                save_diary2txt(diary_content, user_name, folder_path);
+            char folder_path[128] = "./user_messages";
+            save_diary2txt(diary_content, m_recv_cookie, folder_path);
 
-                char *m_url_real = (char *)malloc(sizeof(char) * 200);
-                strcpy(m_url_real, "/diary.html");
-                strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+            char *m_url_real = (char *)malloc(sizeof(char) * 200);
+            strcpy(m_url_real, "/diary.html");
+            strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
 
-                free(m_url_real);
-            }
-            else{
-                char *m_url_real = (char *)malloc(sizeof(char) * 200);
-                strcpy(m_url_real, "/diaryerror.html");
-                strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-                free(m_url_real);
-            }
+            free(m_url_real);
         }else if(*(p + 1) == 'b'){
-            if (users.find(user_name) != users.end() && users[user_name] == passwd){
                 char sql_get[256];
-                sprintf(sql_get, "select replay from user where username = '%s'", user_name);
+                sprintf(sql_get, "select replay from user where username = '%s'", m_recv_cookie);
                 int ret = mysql_query(mysql, sql_get);
                 if(ret != 0) std::cout << "mysql get replay error" << std::endl;
                 MYSQL_RES* sql_res;
@@ -655,16 +653,7 @@ http_conn::HTTP_CODE http_conn::do_request()
                 strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
 
                 free(m_url_real);
-            }
-            else{
-                char *m_url_real = (char *)malloc(sizeof(char) * 200);
-                strcpy(m_url_real, "/diaryerror.html");
-                strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-                free(m_url_real);
-            }
-        }
-        
+        }   
     }
     else if(*(p + 1) == 'c'){ // 进入上传文件界面
         char *m_url_real = (char *)malloc(sizeof(char) * 200);
@@ -726,7 +715,7 @@ bool http_conn::write()
 
     while (1)
     {
-        temp = writev(m_sockfd, m_iv, m_iv_count);
+        temp =  (m_sockfd, m_iv, m_iv_count);
 
         if (temp < 0)
         {
@@ -797,8 +786,14 @@ bool http_conn::add_status_line(int status, const char *title)
 }
 bool http_conn::add_headers(int content_len)
 {
-    return add_content_length(content_len) && add_linger() &&
+    if (if_use_cookie) {
+        // Add Cookies
+        return add_content_length(content_len) && add_linger() 
+                && add_cookie(m_send_cookie) && add_blank_line();
+    }else{
+        return add_content_length(content_len) && add_linger() &&
            add_blank_line();
+    }   
 }
 bool http_conn::add_content_length(int content_len)
 {
@@ -820,6 +815,10 @@ bool http_conn::add_content(const char *content)
 {
     return add_response("%s", content);
 }
+bool http_conn::add_cookie(const char *cookie){
+    return add_response("Set-Cookie:sessionid=%s; HttpOnly; Path=/\r\n", cookie);
+}
+
 bool http_conn::process_write(HTTP_CODE ret)
 {
     switch (ret)

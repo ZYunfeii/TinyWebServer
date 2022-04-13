@@ -28,9 +28,9 @@ class util_timer;
 
 struct client_data
 {
-    sockaddr_in address;
-    int sockfd;
-    util_timer *timer;
+    sockaddr_in address; // ip地址
+    int sockfd;          // 套接字
+    util_timer *timer;   // 定时器：用于在长期没有数据传输时删除该连接
 };
 
 class util_timer // 双端链表结点定义

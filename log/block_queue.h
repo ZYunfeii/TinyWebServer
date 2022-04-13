@@ -13,6 +13,9 @@
 #include "../lock/locker.h"
 using namespace std;
 
+
+// 阻塞队列（BlockingQueue）是一个支持两个附加操作的队列。这两个附加的操作是：
+// 1.在队列为空时，获取元素的线程会等待队列变为非空。2.当队列满时，存储元素的线程会等待队列可用。
 template <class T>
 class block_queue
 {
@@ -21,7 +24,7 @@ public:
     {
         if (max_size <= 0)
         {
-            exit(-1);
+            exit(-1); // 非正常运行导致退出程序
         }
 
         m_max_size = max_size;
@@ -121,17 +124,16 @@ public:
         m_mutex.unlock();
         return tmp;
     }
-    //往队列添加元素，需要将所有使用队列的线程先唤醒
-    //当有元素push进队列,相当于生产者生产了一个元素
-    //若当前没有线程等待条件变量,则唤醒无意义
-    bool push(const T &item)
+    // 往队列添加元素，需要将所有使用队列的线程先唤醒
+    // 当有元素push进队列,相当于生产者生产了一个元素
+    // 若当前没有线程等待条件变量,则唤醒无意义
+    bool push(const T &item)      // 生产者
     {
-
         m_mutex.lock();
         if (m_size >= m_max_size)
         {
 
-            m_cond.broadcast();
+            m_cond.broadcast(); // 广播通知“消费者”取
             m_mutex.unlock();
             return false;
         }
@@ -146,7 +148,7 @@ public:
         return true;
     }
     //pop时,如果当前队列没有元素,将会等待条件变量
-    bool pop(T &item)
+    bool pop(T &item)           // 消费者
     {
 
         m_mutex.lock();

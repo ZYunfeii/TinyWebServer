@@ -6,7 +6,7 @@ Config::Config(){
 
     //日志写入方式，默认同步
     LOGWrite = 0;
-
+ 
     //触发组合模式,默认listenfd LT + connfd LT
     TRIGMode = 3; // 
 

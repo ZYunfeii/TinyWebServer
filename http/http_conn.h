@@ -31,7 +31,7 @@ class http_conn
 {
 public:
     static const int FILENAME_LEN = 200; // 文件名的最大长度
-    static const int READ_BUFFER_SIZE = 300000;
+    static const int READ_BUFFER_SIZE = 2048;
     static const int WRITE_BUFFER_SIZE = 1024;
     enum METHOD
     {
@@ -111,7 +111,9 @@ private:
     bool add_content_length(int content_length);
     bool add_linger();
     bool add_blank_line();
+    bool add_cookie(const char *cookie);
 
+    bool if_use_cookie;
 public:
     // 所有socket上的事件都被注册到同一个epoll内核事件表中，所以将epoll文件描述符设置为静态的
     static int m_epollfd;
@@ -139,6 +141,8 @@ private:
     char *m_url; // 客户请求的目标文件的文件名
     char *m_version; // HTTP协议版本号
     char *m_host;    // 主机名
+    char m_send_cookie[100];  // 增加cookie功能
+    char m_recv_cookie[100];  // 增加cookie功能
     int m_content_length; // HTTP请求的消息体的长度
     bool m_linger;   // HTTP请求是否要求保持连接
     char *m_file_address; // 客户请求的目标文件被mmap到内存中的起始位置

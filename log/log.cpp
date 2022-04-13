@@ -29,7 +29,7 @@ bool Log::init(const char *file_name, int close_log, int log_buf_size, int split
         m_log_queue = new block_queue<string>(max_queue_size);
         pthread_t tid;
         //flush_log_thread为回调函数,这里表示创建线程异步写日志
-        pthread_create(&tid, NULL, flush_log_thread, NULL);
+        pthread_create(&tid, NULL, flush_log_thread, NULL); // 线程不断从阻塞队列中取出log写入
     }
     
     m_close_log = close_log;
@@ -59,7 +59,7 @@ bool Log::init(const char *file_name, int close_log, int log_buf_size, int split
 
     m_today = my_tm.tm_mday;
     
-    m_fp = fopen(log_full_name, "a");
+    m_fp = fopen(log_full_name, "a"); // 当mode是“a”时，表示“打开文件，用于追加 (在文件尾写)。如果文件不存在就创建它。
     if (m_fp == NULL)
     {
         return false;
@@ -68,7 +68,7 @@ bool Log::init(const char *file_name, int close_log, int log_buf_size, int split
     return true;
 }
 
-void Log::write_log(int level, const char *format, ...)
+void Log::write_log(int level, const char *format, ...) 
 {
     struct timeval now = {0, 0};
     gettimeofday(&now, NULL);
@@ -141,7 +141,7 @@ void Log::write_log(int level, const char *format, ...)
 
     m_mutex.unlock();
 
-    if (m_is_async && !m_log_queue->full())
+    if (m_is_async && !m_log_queue->full()) // 同步并且队列不满
     {
         m_log_queue->push(log_str);
     }
