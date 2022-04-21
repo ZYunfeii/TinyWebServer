@@ -1,5 +1,4 @@
 #include "http_conn.h"
-
 #include <mysql/mysql.h>
 #include <fstream>
 #include <time.h>
@@ -15,43 +14,14 @@ const char *error_404_form = "The requested file was not found on this server.\n
 const char *error_500_title = "Internal Error";
 const char *error_500_form = "There was an unusual problem serving the request file.\n";
 
+int http_conn::m_user_count = 0;
+int http_conn::m_epollfd = -1;
 locker m_lock;
 map<string, string> users;
-
-static void m_sleep(int timeout){
-    struct timeval sTime;
-    sTime.tv_sec = 0;
-    sTime.tv_usec = timeout * 1000; // ms
-    select(0, NULL, NULL, NULL, &sTime);
-}
-
-static void save_diary2txt(char* text, char* username, char* file_root){
-    char data[1024];
-    ofstream outfile;
-    char c[128];
-    sprintf(c, "/%s.txt", username);
-    strcat(file_root, c);
-    outfile.open(file_root, ios::app);
-    outfile << text << '\n';
-}
-
-static void cpp_write_html(char* data_show){
-    ofstream myhtml;
-    myhtml.open("./root/my_dynamic_html.html", ios::out | ios::trunc);
-    myhtml << "<!DOCTYPE html>";
-    myhtml << "<html>";
-    myhtml << "<head><meta charset=\"UTF-8\"><title>elegant</title></head>";
-    myhtml << "<body><br/><br/>";
-
-    char src[1024];
-    sprintf(src, "<div align=\"center\"><font size=\"5\"> <strong>%s</strong></font></div>", data_show);
-    myhtml << src;
-
-    myhtml << "</body>";
-    myhtml << "</html>";
-}
-
+Cookie *m_cookie = Cookie::get_instance();        // 获取Cookie单例
+ 
 void http_conn::binary_write_data(){
+    // std::cout<<m_string<<std::endl;
     char* ptr_real_data = m_string;
     int count_r_n = 4;
     while(count_r_n){
@@ -67,6 +37,14 @@ void http_conn::binary_write_data(){
     ofs.open("./user_messages/fileuploadData", ios::out | ios::binary);
     ofs.write(ptr_real_data, m_content_length - 44 - offset);
     ofs.close();
+}
+
+inline void http_conn::construct_file_path(char *file_path, int len){
+    char *m_url_real = (char *)malloc(sizeof(char) * 200);
+    strcpy(m_url_real, file_path);
+    strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+    free(m_url_real);
 }
 
 void http_conn::initmysql_result(connection_pool *connPool)
@@ -90,66 +68,16 @@ void http_conn::initmysql_result(connection_pool *connPool)
     //返回所有字段结构的数组
     MYSQL_FIELD *fields = mysql_fetch_fields(result);
 
+    
     //从结果集中获取下一行，将对应的用户名和密码，存入map中
     while (MYSQL_ROW row = mysql_fetch_row(result))
     {
-        string temp1(row[0]);
-        string temp2(row[1]);
-        users[temp1] = temp2;
-    }
+        string name(row[0]);
+        string passwd(row[1]);
+        users[name] = passwd;
+        m_cookie->add_user_str(name);
+    } 
 }
-
-//对文件描述符设置非阻塞
-int setnonblocking(int fd)
-{
-    int old_option = fcntl(fd, F_GETFL);
-    int new_option = old_option | O_NONBLOCK;
-    fcntl(fd, F_SETFL, new_option);
-    return old_option;
-}
-
-//将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
-void addfd(int epollfd, int fd, bool one_shot, int TRIGMode)
-{
-    epoll_event event;
-    event.data.fd = fd;
-
-    if (1 == TRIGMode)
-        event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
-    else
-        event.events = EPOLLIN | EPOLLRDHUP;
-
-    if (one_shot)
-        event.events |= EPOLLONESHOT;
-    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
-    setnonblocking(fd);
-}
-
-//从内核时间表删除描述符
-void removefd(int epollfd, int fd)
-{
-    epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, 0);
-    close(fd);
-}
-
-// 将事件重置为EPOLLONESHOT
-// 对于注册了EPOLLONESHOT事件的文件描述符，操作系统最多触发其上注册的一个可读、可写或者异常事件，且只触发一次
-// EPOLLRDHUP是从Linux内核2.6.17开始由GNU引入的事件。 当socket接收到对方关闭连接时的请求之后触发，有可能是TCP连接被对方关闭，也有可能是对方关闭了写操作。
-void modfd(int epollfd, int fd, int ev, int TRIGMode)
-{
-    epoll_event event;
-    event.data.fd = fd;
-
-    if (1 == TRIGMode)
-        event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
-    else
-        event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
-
-    epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event); // 修改epollfd上的注册事件
-}
-
-int http_conn::m_user_count = 0;
-int http_conn::m_epollfd = -1;
 
 //关闭连接，关闭一个连接，客户总量减一
 void http_conn::close_conn(bool real_close)
@@ -157,7 +85,7 @@ void http_conn::close_conn(bool real_close)
     if (real_close && (m_sockfd != -1))
     {
         printf("close %d\n", m_sockfd);
-        removefd(m_epollfd, m_sockfd);
+        tools::removefd(m_epollfd, m_sockfd);
         m_sockfd = -1;
         m_user_count--;
     }
@@ -170,7 +98,7 @@ void http_conn::init(int sockfd, const sockaddr_in &addr, char *root, int TRIGMo
     m_sockfd = sockfd;
     m_address = addr;
 
-    addfd(m_epollfd, sockfd, true, m_TRIGMode); // 把和client的tcp套接字加入epollfd
+    tools::addfd(m_epollfd, sockfd, true, m_TRIGMode); // 把和client的tcp套接字加入epollfd
     m_user_count++;
 
     //当浏览器出现连接重置时，可能是网站根目录出错或http响应格式出错或者访问的文件中内容完全为空
@@ -278,7 +206,7 @@ bool http_conn::read_once()  // 线程池将自动调用它读取消息
     {
         // 弥天bug，没想通原理。项目在调试的时候断点加在recv后就能上传，如果不加断点上线运行就不行
         
-        // m_sleep(300);
+        // tools::m_sleep(200);
         int count = 0; 
         while (true)
         {
@@ -532,7 +460,7 @@ http_conn::HTTP_CODE http_conn::do_request()
             if (users.find(name) == users.end()) // 没有重名的
             {
                 if_use_cookie = true; // 开启cookie
-                strcpy(m_send_cookie, name);  // cookie设置为用户name
+                strcpy(m_send_cookie, MD5::md5_encryption(name).c_str());  // cookie设置为用户name MD5码
                 m_lock.lock();
                 int res = mysql_query(mysql, sql_insert);
                 users.insert(pair<string, string>(name, password));
@@ -554,7 +482,7 @@ http_conn::HTTP_CODE http_conn::do_request()
             
             if (users.find(name) != users.end() && users[name] == password){
                 if_use_cookie = true;
-                strcpy(m_send_cookie, name);
+                strcpy(m_send_cookie, MD5::md5_encryption(name).c_str());
                 strcpy(m_url, "/welcome.html");
             }
             else
@@ -562,55 +490,25 @@ http_conn::HTTP_CODE http_conn::do_request()
         }
     }
 
-    if (*(p + 1) == '0') // 0 1是写在html中的，点击网页按钮会发布post报文
-    {
-        char *m_url_real = (char *)malloc(sizeof(char) * 200);
-        strcpy(m_url_real, "/register.html");
-        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-        free(m_url_real);
+    if (*(p + 1) == '0'){ // 0 1是写在html中的，点击网页按钮会发布post报文
+        construct_file_path("/register.html", len);
     }
-    else if (*(p + 1) == '1' && *(p + 2) == '2')
-    {
-        char *m_url_real = (char *)malloc(sizeof(char) * 200);
-        strcpy(m_url_real, "/log.html");
-        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-        free(m_url_real);
+    else if (*(p + 1) == '1' && *(p + 2) == '2'){
+        construct_file_path("/log.html", len);
     }
-    else if (*(p + 1) == '5')
-    {
-        char *m_url_real = (char *)malloc(sizeof(char) * 200);
-        strcpy(m_url_real, "/picture.html");
-        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-        free(m_url_real);
+    else if (*(p + 1) == '5'){
+        construct_file_path("/picture.html", len);
     }
-    else if (*(p + 1) == '6')
-    {
-        char *m_url_real = (char *)malloc(sizeof(char) * 200);
-        strcpy(m_url_real, "/video.html");
-        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-        free(m_url_real);
+    else if (*(p + 1) == '6'){
+        construct_file_path("/video.html", len);
     }
-    else if (*(p + 1) == '7')
-    {
-        char *m_url_real = (char *)malloc(sizeof(char) * 200);
-        strcpy(m_url_real, "/fans.html");
-        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-        free(m_url_real);
+    else if (*(p + 1) == '7'){
+        construct_file_path("/fans.html", len);
     }
-    else if (*(p + 1) == '8')   // 日记功能
-    {
-        char *m_url_real = (char *)malloc(sizeof(char) * 200);
-        strcpy(m_url_real, "/diary.html");
-        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-        free(m_url_real);
+    else if (*(p + 1) == '8'){   // 日记功能
+        construct_file_path("/diary.html", len);
     }
-    else if (*(p + 1) == 'a' || *(p + 1) == 'b')   // 日记提交功能(未完成)
+    else if (*(p + 1) == 'a' || *(p + 1) == 'b')   // 日记提交功能
     {
         // 获取文本框输入
         char diary_content[100];
@@ -619,57 +517,53 @@ http_conn::HTTP_CODE http_conn::do_request()
         strcpy(diary_content, m_string + i + 1);
 
         if(*(p + 1) == 'a'){
-            // 目前cookie就是user_name
-            char sql_update[256];
-            sprintf(sql_update, "update user set content =  '%s' where username = '%s'", diary_content, m_recv_cookie);
+            // 目前cookie就是user_name MD5
+            std::string md5_str = m_recv_cookie;
+            char *user_str = (char*)m_cookie->find_user_from_md5(md5_str).c_str(); 
+            if (strcmp(user_str, "No user find") != 0){
+                char sql_update[256];
+                sprintf(sql_update, "update user set content =  '%s' where username = '%s'", diary_content, user_str);
 
-            m_lock.lock();
-            // 可能多个线程同时修改数据库，因此要加锁
-            int res = mysql_query(mysql, sql_update);
-            m_lock.unlock();
-            if (res) std::cout<<"diary insert fail"<<std::endl;
+                m_lock.lock();
+                // 可能多个线程同时修改数据库，因此要加锁
+                int res = mysql_query(mysql, sql_update);
+                m_lock.unlock();
+                if (res) std::cout<<"diary insert fail"<<std::endl;
 
-            char folder_path[128] = "./user_messages";
-            save_diary2txt(diary_content, m_recv_cookie, folder_path);
-
-            char *m_url_real = (char *)malloc(sizeof(char) * 200);
-            strcpy(m_url_real, "/diary.html");
-            strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-            free(m_url_real);
+                char folder_path[128] = "./user_messages";
+                tools::save_diary2txt(diary_content, user_str, folder_path);
+                construct_file_path("/diary.html", len);
+            }else{
+                construct_file_path("/judge.html", len);
+            }
         }else if(*(p + 1) == 'b'){
+            std::string md5_str = m_recv_cookie;
+            char *user_str = (char*)m_cookie->find_user_from_md5(md5_str).c_str(); 
+            if (strcmp(user_str, "No user find") != 0){
                 char sql_get[256];
-                sprintf(sql_get, "select replay from user where username = '%s'", m_recv_cookie);
+                sprintf(sql_get, "select replay from user where username = '%s'", user_str);
                 int ret = mysql_query(mysql, sql_get);
                 if(ret != 0) std::cout << "mysql get replay error" << std::endl;
                 MYSQL_RES* sql_res;
                 MYSQL_ROW row;
                 sql_res = mysql_store_result(mysql);
                 row = mysql_fetch_row(sql_res); // 默认第一个匹配内容
-
-                char *m_url_real = (char *)malloc(sizeof(char) * 200);
-                cpp_write_html(row[0]);
-                strcpy(m_url_real, "/my_dynamic_html.html");
-                strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-                free(m_url_real);
+                tools::cpp_write_html(row[0]);
+                construct_file_path("/my_dynamic_html.html", len);
+            }else{
+                construct_file_path("/judge.html", len);
+            }
         }   
     }
     else if(*(p + 1) == 'c'){ // 进入上传文件界面
-        char *m_url_real = (char *)malloc(sizeof(char) * 200);
-        strcpy(m_url_real, "/fileupload.html");
-        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-        free(m_url_real);
+        construct_file_path("/fileupload.html", len);
     }
     else if(*(p + 1) == 'd'){ // client提交上传文件post请求
         binary_write_data();
-
-        char *m_url_real = (char *)malloc(sizeof(char) * 200);
-        strcpy(m_url_real, "/fileupload.html");
-        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-        free(m_url_real);
+        construct_file_path("/fileupload.html", len);
+    }
+    else if(*(p + 1) == 'e'){ // 个人博客
+        construct_file_path("/index.html", len);
     }
     else
         strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1); // 把 src 所指向的字符串复制到 dest，最多复制 n 个字符。当 src 的长度小于 n 时，dest 的剩余部分将用空字节填充
@@ -708,7 +602,7 @@ bool http_conn::write()
 
     if (bytes_to_send == 0)
     {
-        modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+        tools::modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
         init();
         return true;
     }
@@ -721,7 +615,7 @@ bool http_conn::write()
         {
             if (errno == EAGAIN)
             {
-                modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
+                tools::modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
                 return true;
             }
             unmap();
@@ -745,7 +639,7 @@ bool http_conn::write()
         if (bytes_to_send <= 0)
         {
             unmap();
-            modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+            tools::modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
 
             if (m_linger)
             {
@@ -886,7 +780,7 @@ void http_conn::process()
     HTTP_CODE read_ret = process_read();
     if (read_ret == NO_REQUEST) // 没有请求 
     {
-        modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+        tools::modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
         return;
     }
     bool write_ret = process_write(read_ret);
@@ -894,5 +788,5 @@ void http_conn::process()
     {
         close_conn();
     }
-    modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
+    tools::modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
 }
